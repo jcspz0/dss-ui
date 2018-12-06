@@ -1,0 +1,12 @@
+<h1>Documents</h1>
+
+<div class="col-lg-2 text-center">
+  <input type="file" (change)="uploadFile($event.target.files)" class="custom-file-input" id="file_name">
+  <label class="custom-file-label" for="customFile">File</label>
+</div>
+
+<div *ngFor="let doc of docs | async" style="width: 300px;">
+  <document-details [doc]='doc'></document-details>
+</div>
+
+

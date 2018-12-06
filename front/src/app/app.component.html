@@ -1,0 +1,10 @@
+<div style="padding: 20px;">
+  <h1 style="color: blue">{{title}}</h1>
+  <h3>{{description}}</h3>
+  <nav class="navbar-brand">
+    <a routerLink="user" class="btn btn-primary active" role="button" routerLinkActive="active">List of Users</a>
+    <a routerLink="user/add" class="btn btn-primary active" role="button" routerLinkActive="active">Add user</a>
+    <a routerLink="user/dss" class="btn btn-primary active" role="button" routerLinkActive="active">Document store system</a>
+  </nav>
+  <router-outlet></router-outlet>
+</div>

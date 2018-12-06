@@ -1,0 +1,17 @@
+<div *ngIf="doc">
+  <div>
+    <label><strong>MD5:</strong></label> {{doc.ID}}
+  </div>
+
+  <div>
+    <label><strong>Name: </strong></label> {{doc.Name}}
+  </div>
+
+  <div>
+    <label><strong>Size: </strong></label> {{doc.Size}}
+  </div>
+
+  <span class="button is-small btn-danger" (click)='deleteDoc()'>Delete</span>
+
+  <hr/>
+</div>
