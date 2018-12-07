@@ -62,8 +62,11 @@ func main() {
 	router.HandleFunc("/dss/api/documents/download/{id}", use(serveDocuments, basicAuth)).Methods("GET")
 	router.HandleFunc("/dss/api/documents/{id}", use(deleteDocuments, basicAuth)).Methods("DELETE")
 	router.HandleFunc("/dss/api/documents", use(uploadDocument, basicAuth)).Methods("POST")
+	router.HandleFunc("/dss/api/documents/{id}", use(uploadDocumentWithUser, basicAuth)).Methods("POST")
+	router.HandleFunc("/dss/api/documents/{id}/{userid}", use(deleteDocumentsWithUser, basicAuth)).Methods("DELETE")
 
 	router.HandleFunc("/dss/api/users", use(getUsers, basicAuth)).Methods("GET")
+	router.HandleFunc("/dss/api/users/{id}", use(findUserByName, basicAuth)).Methods("GET")
 	router.HandleFunc("/dss/api/users/{id}", use(deleteUsers, basicAuth)).Methods("DELETE")
 	router.HandleFunc("/dss/api/users", use(createUsers, basicAuth)).Methods("POST")
 
@@ -89,6 +92,41 @@ func uploadDocument(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 	io.Copy(f, file)
 
+}
+
+func uploadDocumentWithUser(w http.ResponseWriter, r *http.Request) {
+	uploadDocument(w, r)
+	//agregar codigo para notificar sobre que usuario subió
+	vars := mux.Vars(r)
+	found, user, users := getUserAndRestOfUsers(vars["id"])
+	fmt.Println("found ")
+	fmt.Println(found)
+	fmt.Println("user ")
+	fmt.Println(user)
+	fmt.Println("usres ")
+	fmt.Println(users)
+	//enviar a la cola de correo
+
+}
+
+func findUserByName(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	found, _, _ := getUserAndRestOfUsers(vars["id"])
+	if !found {
+		http.Error(w, "notFound", http.StatusNotFound)
+	}
+}
+
+func deleteDocumentsWithUser(w http.ResponseWriter, r *http.Request) {
+	deleteDocuments(w, r)
+	vars := mux.Vars(r)
+	found, user, users := getUserAndRestOfUsers(vars["userid"])
+	fmt.Println("found ")
+	fmt.Println(found)
+	fmt.Println("user ")
+	fmt.Println(user)
+	fmt.Println("usres ")
+	fmt.Println(users)
 }
 
 func createUsers(w http.ResponseWriter, r *http.Request) {
@@ -313,6 +351,32 @@ func deleteUser(userId string) bool {
 		log.Fatalln(err)
 	}
 	return resp
+}
+
+func getUserAndRestOfUsers(name string) (bool, User, []User) {
+	root := "./users/users.txt"
+	found := false
+	var users []User
+	users = make([]User, 0)
+	var user User
+	file, err := ioutil.ReadFile(root)
+	if err != nil {
+		fmt.Print(err)
+	}
+	registers := strings.Split(string(file), ";")
+	for _, reg := range registers[:] {
+		aux := strings.Split(reg, ",")
+		if len(aux) > 1 {
+			if aux[1] != name {
+				users = append(users, User{ID: aux[0], Name: aux[1], Email: aux[2]})
+			} else {
+				user = User{ID: aux[0], Name: aux[1], Email: aux[2]}
+				found = true
+			}
+
+		}
+	}
+	return found, user, users
 }
 
 func deleteDocument(docId string) bool {

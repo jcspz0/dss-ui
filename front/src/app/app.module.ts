@@ -11,6 +11,10 @@ import { DocDetailsComponent } from './doc-details/doc-details.component';
 import { AppRoutingModule } from './app-routing.module';
 import { HttpClientModule } from '@angular/common/http';
 
+import { LoginComponent } from './login/login.component';
+
+import { Globals } from './globals';
+
 @NgModule({
   declarations: [
     AppComponent,
@@ -18,7 +22,8 @@ import { HttpClientModule } from '@angular/common/http';
     UserDetailsComponent,
     UserListComponent,
     DocListComponent,
-    DocDetailsComponent
+    DocDetailsComponent,
+    LoginComponent
   ],
   imports: [
     BrowserModule,
@@ -26,7 +31,7 @@ import { HttpClientModule } from '@angular/common/http';
     AppRoutingModule,
     HttpClientModule
   ],
-  providers: [],
+  providers: [Globals],
   bootstrap: [AppComponent]
 })
 export class AppModule { }
