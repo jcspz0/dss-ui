@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rs/cors"
 
@@ -58,10 +59,6 @@ func main() {
 	flagUser = "user"
 	flagPass = "pass"
 	router.HandleFunc("/dss/api/documents", use(getDocuments, basicAuth)).Methods("GET")
-	router.HandleFunc("/dss/api/documents/{id}", use(getDocumentById, basicAuth)).Methods("GET")
-	router.HandleFunc("/dss/api/documents/download/{id}", use(serveDocuments, basicAuth)).Methods("GET")
-	router.HandleFunc("/dss/api/documents/{id}", use(deleteDocuments, basicAuth)).Methods("DELETE")
-	router.HandleFunc("/dss/api/documents", use(uploadDocument, basicAuth)).Methods("POST")
 	router.HandleFunc("/dss/api/documents/{id}", use(uploadDocumentWithUser, basicAuth)).Methods("POST")
 	router.HandleFunc("/dss/api/documents/{id}/{userid}", use(deleteDocumentsWithUser, basicAuth)).Methods("DELETE")
 
@@ -70,10 +67,34 @@ func main() {
 	router.HandleFunc("/dss/api/users/{id}", use(deleteUsers, basicAuth)).Methods("DELETE")
 	router.HandleFunc("/dss/api/users", use(createUsers, basicAuth)).Methods("POST")
 
-	log.Fatal(http.ListenAndServe(":9001", c.Handler(router)))
+	log.Fatal(http.ListenAndServe(":9001", c.Handler(http.TimeoutHandler(router, time.Second*10, "Timeout!"))))
 }
 
-func uploadDocument(w http.ResponseWriter, r *http.Request) {
+func uploadDocument(w http.ResponseWriter, r *http.Request) string {
+	r.ParseMultipartForm(32 << 20)
+	file, handler, err := r.FormFile("file")
+	if err != nil {
+		fmt.Println("no pudo cargar el file")
+		fmt.Println(err)
+		http.Error(w, "", http.StatusInternalServerError)
+		return ""
+	}
+	defer file.Close()
+	f, err := os.OpenFile("./temp/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		fmt.Println("no pudo escribir el file")
+		http.Error(w, "", http.StatusInternalServerError)
+		return ""
+	}
+	defer f.Close()
+	io.Copy(f, file)
+
+	return handler.Filename
+
+}
+
+func uploadDocumentWithUser(w http.ResponseWriter, r *http.Request) {
+	//descomentar esto para que suba el documento
 	r.ParseMultipartForm(32 << 20)
 	file, handler, err := r.FormFile("file")
 	if err != nil {
@@ -83,29 +104,22 @@ func uploadDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	f, err := os.OpenFile("./temp/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
-	if err != nil {
-		fmt.Println("no pudo escribir el file")
-		http.Error(w, "", http.StatusInternalServerError)
+	buf := bytes.NewBuffer(nil)
+	if _, err := io.Copy(buf, file); err != nil {
+		fmt.Println(err)
 		return
 	}
-	defer f.Close()
-	io.Copy(f, file)
-
-}
-
-func uploadDocumentWithUser(w http.ResponseWriter, r *http.Request) {
-	uploadDocument(w, r)
+	//name := uploadDocument(w, r)
+	name := SaveStorage(handler.Filename, buf.Bytes())
+	fmt.Println("nombre del archivo: ", handler.Filename)
 	//agregar codigo para notificar sobre que usuario subió
 	vars := mux.Vars(r)
-	found, user, users := getUserAndRestOfUsers(vars["id"])
-	fmt.Println("found ")
-	fmt.Println(found)
-	fmt.Println("user ")
-	fmt.Println(user)
-	fmt.Println("usres ")
-	fmt.Println(users)
+	_, user, users := getUserAndRestOfUsers(vars["id"])
 	//enviar a la cola de correo
+
+	if name != "ERROR" {
+		SendMail(user, users, "Se ha subido el archivo "+name)
+	}
 
 }
 
@@ -118,15 +132,15 @@ func findUserByName(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteDocumentsWithUser(w http.ResponseWriter, r *http.Request) {
-	deleteDocuments(w, r)
+	//name := deleteDocuments(w, r)
+
 	vars := mux.Vars(r)
-	found, user, users := getUserAndRestOfUsers(vars["userid"])
-	fmt.Println("found ")
-	fmt.Println(found)
-	fmt.Println("user ")
-	fmt.Println(user)
-	fmt.Println("usres ")
-	fmt.Println(users)
+	name := deleteStorage(vars["id"])
+	fmt.Println("el deleteStorage devolvio :", name)
+	_, user, users := getUserAndRestOfUsers(vars["userid"])
+	if name != "ERROR" {
+		SendMail(user, users, "Se ha eliminado el archivo "+name)
+	}
 }
 
 func createUsers(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +212,7 @@ func getDocumentById(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if documentInArray(vars["id"], docs) {
+	if documentInArray(vars["id"], docs) != "" {
 		json.NewEncoder(w).Encode(parseDocument(doc))
 	} else {
 		http.Error(w, "", http.StatusNotFound)
@@ -207,13 +221,13 @@ func getDocumentById(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func documentInArray(a string, list map[string]DocumentDAO) bool {
+func documentInArray(a string, list map[string]DocumentDAO) string {
 	for _, b := range list {
 		if b.ID == a {
-			return true
+			return b.Name
 		}
 	}
-	return false
+	return ""
 }
 
 func getDocuments(w http.ResponseWriter, r *http.Request) {
@@ -246,7 +260,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func loadDocuments(docs map[string]DocumentDAO) map[string]DocumentDAO {
-	root := "./temp/"
+	/*root := "./temp/"
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if info.Name() != "temp" {
 			id, error := hash_file_md5(path)
@@ -260,8 +274,12 @@ func loadDocuments(docs map[string]DocumentDAO) map[string]DocumentDAO {
 	})
 	if err != nil {
 		panic(err)
-	}
-	return docs
+	}*/
+	data := make(map[string]DocumentDAO, 0)
+	//data["test"] = DocumentDAO{ID: "1", Name: "name", Size: 1, Path: "path"}
+	requestDoc := RequestGetDocuments{List: data}
+	responseDoc := SendStorage(requestDoc)
+	return responseDoc.List
 }
 
 /*func loadUsers(users map[string]User) map[string]User {
@@ -296,19 +314,22 @@ func loadUsers(users []User) []User {
 	return users
 }
 
-func deleteDocuments(w http.ResponseWriter, r *http.Request) {
+func deleteDocuments(w http.ResponseWriter, r *http.Request) string {
 	//var docs []Document
+
 	docs = loadDocuments(docs)
 	vars := mux.Vars(r)
 
 	w.Header().Set("Content-Type", "application/json")
-
-	if documentInArray(vars["id"], docs) {
+	result := documentInArray(vars["id"], docs)
+	if result != "" {
 		deleteDocument(vars["id"])
+
 	} else {
 		http.Error(w, "", http.StatusNotFound)
 
 	}
+	return result
 
 }
 
@@ -444,7 +465,7 @@ func serveDocuments(w http.ResponseWriter, r *http.Request) {
 	//w.Header().Set("Content-Type", "application/octet-stream")
 	//w.Header().Set("Content-Disposition", "attachment")
 
-	if documentInArray(vars["id"], docs) {
+	if documentInArray(vars["id"], docs) != "" {
 		docPath = serveDocument(vars["id"])
 		if docPath != "" {
 

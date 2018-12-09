@@ -38,7 +38,10 @@ export class DocListComponent implements OnInit {
 
   uploadFile(files: FileList) {
 
-    this.docService.uploadFile(files).subscribe(filename => console.log(files[0].name));
+    this.docService.uploadFile(files).subscribe(data => {
+      console.log(data);
+      this.reloadData();
+    });
     this.reloadData();
   }
 
